@@ -1,0 +1,16 @@
+filters:
+  and:
+    - file.folder == "projects"
+    - status != "done"
+    - status != "archived"
+views:
+  - type: table
+    name: Active projects
+    order:
+      - file.name
+      - status
+    sort:
+      - property: status
+        direction: ASC
+      - property: file.mtime
+        direction: DESC

@@ -1,0 +1,10 @@
+# Kokoro TTS + faster-whisper STT + wake word server (:3108)
+fastapi
+uvicorn
+numpy
+soundfile
+sounddevice
+kokoro-onnx
+faster-whisper
+openwakeword
+keyboard

@@ -1,0 +1,10 @@
+{
+	"id": "chase-command-center",
+	"name": "Chase Command Center",
+	"version": "0.0.1",
+	"minAppVersion": "1.5.0",
+	"description": "Private agentic-OS cockpit. Reads vault metrics, daily notes, and run logs; fires Claude Code skills via queue.",
+	"author": "Chase Hannegan",
+	"authorUrl": "https://github.com/cth9191",
+	"isDesktopOnly": true
+}

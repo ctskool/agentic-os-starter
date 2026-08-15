@@ -1,0 +1,11 @@
+node_modules/
+__pycache__/
+*.log
+runner.pid
+.env
+# voice module — heavy/generated
+voice/voice-server/.venv/
+voice/voice-server/*.onnx
+voice/voice-server/*.bin
+voice/voice-server/samples/
+voice/hud-server/.next/

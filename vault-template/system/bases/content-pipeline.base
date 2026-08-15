@@ -1,0 +1,14 @@
+filters:
+  and:
+    - file.path.startsWith("content/")
+    - status != "published"
+views:
+  - type: table
+    name: Content pipeline
+    order:
+      - file.name
+      - status
+      - date
+    sort:
+      - property: date
+        direction: DESC

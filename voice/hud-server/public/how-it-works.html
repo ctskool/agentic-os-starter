@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JARVIS — how the voice loop works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@300;500;700;900&family=Martian+Mono:wght@300;400;700&display=swap" rel="stylesheet" />
+<style>
+/* ===========================================================================
+   JARVIS voice-loop explainer v2 — built as a VIDEO VISUAL AID: every scene
+   is a poster that moves. Minimal reading; the narration carries the words.
+   EMBER CORE design language (matches the HUD).
+   ======================================================================== */
+:root {
+  --accent-h: 27;
+  --bg: oklch(0.13 0.004 270);
+  --ink: oklch(0.9 0.004 270);
+  --ink-dim: oklch(0.62 0.005 270);
+  --ink-faint: oklch(0.43 0.004 270);
+  --ember: hsl(var(--accent-h) 50% 62%);
+  --ember-hot: hsl(var(--accent-h) 65% 72%);
+  --ember-deep: hsl(var(--accent-h) 55% 30%);
+  --white-hot: hsl(var(--accent-h) 40% 90%);
+  --line: hsl(var(--accent-h) 50% 60% / 0.25);
+  --line-faint: hsl(var(--accent-h) 50% 60% / 0.12);
+  --mono: "Martian Mono", ui-monospace, monospace;
+  --display: "Big Shoulders Display", system-ui, sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--mono); font-size: 12px; line-height: 1.7;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+::selection { background: var(--ember); color: var(--bg); }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 30; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 29; pointer-events: none;
+  background: radial-gradient(ellipse 80% 70% at 50% 40%, transparent 55%, oklch(0.06 0.003 270 / 0.65) 100%);
+}
+section { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 8vh 6vw; position: relative; }
+.kicker { font-size: 10px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--ember); margin-bottom: 18px; }
+.kicker::before { content: "// "; color: var(--ink-faint); }
+h1, h2 { font-family: var(--display); font-weight: 900; text-transform: uppercase; line-height: 0.92; }
+h1 { font-size: clamp(64px, 11vw, 170px); }
+h2 { font-size: clamp(40px, 6vw, 92px); margin-bottom: 8px; }
+.sub { color: var(--ink-dim); max-width: 56ch; margin-top: 20px; }
+.sub b { color: var(--ink); font-weight: 400; }
+.sub .hot { color: var(--ember-hot); }
+.rv { opacity: 0; transform: translateY(26px); transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1); }
+.rv.in { opacity: 1; transform: none; }
+.rv:nth-child(2) { transition-delay: 0.08s; }
+.rv:nth-child(3) { transition-delay: 0.16s; }
+.rv:nth-child(4) { transition-delay: 0.24s; }
+
+/* === HERO — live waveform ================================================ */
+#hero { align-items: flex-start; }
+.wave {
+  display: flex; align-items: center; gap: 5px; height: 90px; margin: 38px 0 6px;
+}
+.wave i {
+  display: block; width: 5px; height: 12px; background: var(--ember);
+  animation: wv 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.09s);
+  box-shadow: 0 0 10px hsl(var(--accent-h) 60% 60% / 0.45);
+}
+.wave i:nth-child(4n) { background: var(--ember-hot); }
+@keyframes wv {
+  0%, 100% { height: 10px; opacity: 0.5; }
+  35% { height: calc(18px + var(--a) * 64px); opacity: 1; }
+  60% { height: calc(10px + var(--a) * 26px); }
+}
+.hero-tags { display: flex; gap: 26px; margin-top: 26px; flex-wrap: wrap; }
+.htag { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-dim); }
+.htag b { color: var(--ember-hot); font-weight: 400; }
+
+/* === SCENE 2 — signal path =============================================== */
+.stage-wrap { width: 100%; display: flex; justify-content: center; }
+.stage { position: relative; width: 1600px; height: 660px; flex: none; transform-origin: top center; }
+.wire { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wire path { fill: none; stroke: var(--line); stroke-width: 1; }
+.wire path.async { stroke-dasharray: 5 7; stroke: hsl(var(--accent-h) 50% 60% / 0.35); }
+.wire path.hidden-route { opacity: 0; transition: opacity 0.4s; }
+.wire path.show { opacity: 1; }
+.node { position: absolute; width: 200px; transform: translate(-50%, -50%); text-align: center; cursor: default; }
+.node .icon { height: 46px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; }
+.node .icon svg { width: 44px; height: 44px; stroke: var(--ember); fill: none; stroke-width: 1.3; transition: filter 0.3s, stroke 0.3s; }
+.node.lit .icon svg { stroke: var(--white-hot); filter: drop-shadow(0 0 14px hsl(var(--accent-h) 65% 65% / 0.9)); }
+.node .name { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.06em; text-transform: uppercase; }
+.node .meta { font-size: 9.5px; color: var(--ink-dim); letter-spacing: 0.08em; margin-top: 3px; }
+.node .lat { display: inline-block; font-size: 11px; color: var(--ember-hot); margin-top: 8px; letter-spacing: 0.12em; border: 1px solid var(--line); padding: 3px 10px; }
+.node .tip {
+  position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(6px);
+  width: 260px; padding: 12px 14px; text-align: left; background: oklch(0.16 0.005 270 / 0.97);
+  border-top: 1px solid var(--ember); font-size: 10px; color: var(--ink-dim);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 10;
+}
+.node:hover .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+.node.below .tip { top: auto; bottom: calc(100% + 10px); }
+.pulse {
+  position: absolute; width: 10px; height: 10px; top: 0; left: 0;
+  background: var(--white-hot); transform: rotate(45deg);
+  box-shadow: 0 0 14px var(--ember-hot), 0 0 40px hsl(var(--accent-h) 65% 60% / 0.7);
+  offset-rotate: 0deg; opacity: 0;
+}
+.pulse::after {
+  content: ""; position: absolute; inset: -14px;
+  border: 1px solid hsl(var(--accent-h) 60% 65% / 0.35); transform: rotate(0deg);
+  animation: ring 1.1s ease-out infinite;
+}
+@keyframes ring { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+.pulse.run { animation: travel var(--dur, 4s) cubic-bezier(0.45, 0, 0.4, 1) infinite; animation-delay: var(--delay, 0s); }
+@keyframes travel {
+  0% { opacity: 0; offset-distance: 0%; }
+  4% { opacity: 1; }
+  88% { opacity: 1; }
+  96%, 100% { opacity: 0; offset-distance: 100%; }
+}
+/* live ms ticker chasing the main pulse */
+.ticker {
+  position: absolute; top: 0; left: 0; offset-rotate: 0deg; opacity: 0;
+  font-size: 13px; letter-spacing: 0.1em; color: var(--white-hot);
+  text-shadow: 0 0 12px hsl(var(--accent-h) 65% 60% / 0.8);
+  transform: translate(14px, -26px);
+}
+.ticker.run { animation: travel var(--dur, 4.2s) cubic-bezier(0.45, 0, 0.4, 1) infinite; }
+.tier-bar { display: flex; gap: 10px; justify-content: center; margin: 8px 0 26px; }
+.tier-btn {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  background: none; border: 1px solid var(--line); color: var(--ink-dim);
+  padding: 10px 22px; cursor: pointer; transition: all 0.25s;
+}
+.tier-btn:hover { color: var(--ink); border-color: var(--ember); }
+.tier-btn.on { color: var(--bg); background: var(--ember); border-color: var(--ember); box-shadow: 0 0 24px hsl(var(--accent-h) 60% 60% / 0.35); }
+.readout { text-align: center; font-size: 12px; letter-spacing: 0.14em; color: var(--ink-dim); min-height: 22px; }
+.readout b { color: var(--ember-hot); font-weight: 400; }
+
+/* === SCENE 3 — cascade (animated sieve) ================================== */
+#router .scene-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 5vw; align-items: center; margin-top: 10px; }
+.sieve { position: relative; height: 560px; }
+.gate { position: absolute; left: 0; right: 0; }
+.gate .bar { height: 1px; background: linear-gradient(90deg, var(--ember), var(--line) 70%, transparent); position: relative; }
+.gate .bar::before, .gate .bar::after {
+  content: ""; position: absolute; top: -5px; width: 10px; height: 10px;
+  border: 1px solid var(--ember); transform: rotate(45deg); background: var(--bg);
+}
+.gate .bar::after { right: 30%; } .gate .bar::before { left: 0; }
+.gate .glabel { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; }
+.gate .gname { font-family: var(--display); font-size: 34px; font-weight: 700; text-transform: uppercase; }
+.gate .gms { font-size: 12px; color: var(--ember-hot); letter-spacing: 0.15em; }
+.gate .gsub { font-size: 9.5px; color: var(--ink-faint); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 2px; }
+.gate.dim .gname { color: var(--ink-faint); }
+.gate.dim .bar { opacity: 0.35; }
+.drop {
+  position: absolute; left: 24%; width: 11px; height: 11px;
+  background: var(--white-hot); transform: rotate(45deg);
+  box-shadow: 0 0 12px var(--ember-hot), 0 0 34px hsl(var(--accent-h) 65% 60% / 0.6);
+  animation: sieve-drop 5.2s cubic-bezier(0.5, 0, 0.65, 1) infinite;
+  animation-delay: var(--d, 0s);
+}
+@keyframes sieve-drop {
+  0% { top: -4%; opacity: 0; }
+  6% { opacity: 1; }
+  /* gate 1 at 18% — most utterances stop here in a flash */
+  16%, 20% { top: 18%; }
+  22% { opacity: 1; }
+  30% { top: 18%; opacity: 0; }
+  100% { top: 18%; opacity: 0; }
+}
+.drop.d2 { left: 46%; animation-name: sieve-drop-2; }
+@keyframes sieve-drop-2 {
+  0% { top: -4%; opacity: 0; }
+  6% { opacity: 1; }
+  16%, 22% { top: 18%; }   /* taps gate 1, not recognized */
+  40%, 46% { top: 52%; }   /* lands on the local model */
+  48% { opacity: 1; }
+  58% { top: 52%; opacity: 0; }
+  100% { top: 52%; opacity: 0; }
+}
+.drop.d3 { left: 68%; animation-name: sieve-drop-3; opacity: 0.55; }
+@keyframes sieve-drop-3 {
+  0% { top: -4%; opacity: 0; }
+  6% { opacity: 0.55; }
+  16%, 20% { top: 18%; }
+  38%, 42% { top: 52%; }
+  62%, 68% { top: 86%; }   /* the rare one that needs the cloud slot */
+  78% { top: 86%; opacity: 0; }
+  100% { top: 86%; opacity: 0; }
+}
+.gate .hitflash {
+  position: absolute; left: 0; right: 30%; top: -1px; height: 3px;
+  background: var(--ember-hot); opacity: 0; filter: blur(2px);
+  animation: hit 5.2s linear infinite; animation-delay: var(--hd, 0.8s);
+}
+@keyframes hit { 0%, 14% { opacity: 0; } 17% { opacity: 0.9; } 24%, 100% { opacity: 0; } }
+.cascade-copy .big-line { font-family: var(--display); font-size: clamp(28px, 3vw, 46px); font-weight: 700; text-transform: uppercase; line-height: 1.1; }
+.cascade-copy .big-line em { font-style: normal; color: var(--ember-hot); }
+.cascade-copy p { color: var(--ink-dim); margin-top: 18px; max-width: 44ch; }
+
+/* === SCENE 4 — capabilities (typed demos) ================================ */
+.caps { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-faint); margin-top: 36px; }
+.cap { background: var(--bg); padding: 30px 30px 34px; }
+.cap h3 { font-family: var(--display); font-size: 28px; font-weight: 700; text-transform: uppercase; }
+.cap h3::before { content: "▸ "; color: var(--ember); }
+.cap .demo {
+  margin-top: 16px; padding: 14px 16px; border-left: 2px solid var(--ember);
+  background: oklch(0.155 0.005 270); font-size: 11px; min-height: 64px;
+}
+.cap .demo .who { color: var(--ink-faint); letter-spacing: 0.15em; text-transform: uppercase; font-size: 8.5px; }
+.cap .demo .line { color: var(--ember-hot); white-space: nowrap; overflow: hidden; display: inline-block; max-width: 100%; vertical-align: bottom; }
+.cap.in-view .demo .line { animation: typewriter 2.2s steps(40) 0.4s both; }
+@keyframes typewriter { from { width: 0; } to { width: 100%; } }
+.cap .demo .resp { color: var(--ink-dim); margin-top: 8px; opacity: 0; }
+.cap.in-view .demo .resp { animation: fadeup 0.6s ease 2.8s both; }
+@keyframes fadeup { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* === SCENE 5 — latency timeline ========================================== */
+.tl { margin-top: 50px; }
+.tl-bar { position: relative; height: 64px; display: flex; border: 1px solid var(--line-faint); }
+.tl-seg { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.tl-seg i {
+  position: absolute; inset: 0; transform-origin: left;
+  background: linear-gradient(90deg, hsl(var(--accent-h) 55% 30% / 0.5), hsl(var(--accent-h) 55% 45% / 0.55));
+  transform: scaleX(0);
+}
+.tl.go .tl-seg i { animation: fill 0.9s cubic-bezier(0.22,1,0.36,1) forwards; animation-delay: var(--fd, 0s); }
+@keyframes fill { to { transform: scaleX(1); } }
+.tl-seg span { position: relative; z-index: 1; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink); }
+.tl-seg span b { color: var(--white-hot); font-family: var(--display); font-size: 26px; font-weight: 900; letter-spacing: 0.02em; margin-right: 8px; }
+.tl-scale { display: flex; justify-content: space-between; color: var(--ink-faint); font-size: 9px; letter-spacing: 0.2em; margin-top: 10px; }
+.stats { display: flex; gap: 60px; flex-wrap: wrap; margin-top: 64px; }
+.stat .n { font-family: var(--display); font-weight: 900; font-size: clamp(60px, 8vw, 128px); line-height: 0.9; color: var(--white-hot); }
+.stat .n em { font-style: normal; color: var(--ember); }
+.stat .l { font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--ink-dim); margin-top: 8px; }
+.stack-line { margin-top: 56px; color: var(--ink-faint); font-size: 10px; letter-spacing: 0.12em; max-width: 90ch; }
+.stack-line b { color: var(--ink-dim); font-weight: 400; }
+footer {
+  padding: 30px 6vw 36px; display: flex; justify-content: space-between;
+  border-top: 1px solid var(--line-faint); color: var(--ink-faint);
+  font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase;
+}
+@media (max-width: 900px) { .caps, #router .scene-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- ====== SCENE 1 — title + living waveform ====== -->
+<section id="hero">
+  <div class="kicker rv">jarvis hud · system dossier</div>
+  <h1 class="rv">A VOICE LOOP<br/>WITH <span style="color:var(--ember)">NO CLOUD</span><br/>IN THE HOT PATH</h1>
+  <div class="wave rv" id="wave" aria-hidden="true"></div>
+  <div class="hero-tags rv">
+    <span class="htag">wake word <b>local</b></span>
+    <span class="htag">speech→text <b>local</b></span>
+    <span class="htag">intent routing <b>local</b></span>
+    <span class="htag">the voice <b>local</b></span>
+    <span class="htag">deep work <b>claude, announced back</b></span>
+  </div>
+</section>
+
+<!-- ====== SCENE 2 — the signal path ====== -->
+<section id="path">
+  <div class="kicker rv">scene 01 · the signal path</div>
+  <h2 class="rv">SAY IT. HEAR IT BACK.</h2>
+
+  <div class="tier-bar rv" style="margin-top:26px">
+    <button class="tier-btn" data-tier="2">Tier 2 · Instant answer</button>
+    <button class="tier-btn" data-tier="1">Tier 1 · Run a skill</button>
+    <button class="tier-btn" data-tier="3">Tier 3 · Deep work</button>
+  </div>
+
+  <div class="stage-wrap rv">
+    <div class="stage" id="stage">
+      <svg class="wire" viewBox="0 0 1600 660" aria-hidden="true">
+        <path id="w-main" d="M80,240 H1500"/>
+        <path id="w-branch" class="hidden-route" d="M800,240 V470 H1280"/>
+        <path id="w-return" class="async hidden-route" d="M1280,470 V240"/>
+      </svg>
+
+      <div class="node" style="left:80px; top:240px">
+        <div class="icon"><svg viewBox="0 0 44 44"><rect x="17" y="6" width="10" height="20" rx="5"/><path d="M10 22a12 12 0 0 0 24 0M22 34v6M15 40h14"/></svg></div>
+        <div class="name">You speak</div>
+        <div class="meta">“hey jarvis…” / hold space</div>
+        <div class="lat">wake word · local</div>
+        <div class="tip">Always-on mic loop scans 80ms frames for "hey jarvis" — pretrained local model,
+        no cloud key, audio never leaves the box. Saying it mid-reply cuts Jarvis off: full barge-in.</div>
+      </div>
+
+      <div class="node" style="left:420px; top:240px">
+        <div class="icon"><svg viewBox="0 0 44 44"><path d="M4 22h5l4-12 6 24 5-18 4 10 3-4h9"/></svg></div>
+        <div class="name">Whisper</div>
+        <div class="meta">speech → text · CUDA</div>
+        <div class="lat">~130 ms</div>
+        <div class="tip">faster-whisper small.en float16 on the 5090. Domain-vocab prompt keeps "MRR"
+        from coming out "M.R.A.". Warmed at boot — the first clip never pays the cold start.</div>
+      </div>
+
+      <div class="node" style="left:800px; top:240px">
+        <div class="icon"><svg viewBox="0 0 44 44"><path d="M22 4v12M22 28v12M22 16l-14 8M22 16l14 8"/><rect x="17" y="11" width="10" height="10" transform="rotate(45 22 16)"/></svg></div>
+        <div class="name">Router</div>
+        <div class="meta">what did you mean?</div>
+        <div class="lat">20 ms – 600 ms</div>
+        <div class="tip">Three engines, cheapest first: regex rules answer known phrasing in ~20ms;
+        anything else hits a local qwen3.5:4b on the same GPU — grammar-locked JSON, grounded in the
+        live dashboard snapshot + conversation memory.</div>
+      </div>
+
+      <div class="node" style="left:1170px; top:240px">
+        <div class="icon"><svg viewBox="0 0 44 44"><path d="M8 16v12M15 10v24M22 16v12M29 6v32M36 14v16"/></svg></div>
+        <div class="name">Kokoro</div>
+        <div class="meta">text → voice · CUDA</div>
+        <div class="lat">first audio ~270 ms</div>
+        <div class="tip">Kokoro-82M on onnxruntime-gpu. First sentence streams alone so playback starts
+        immediately. A Web Audio sheen chain (highpass + presence + metallic reverb) = the in-the-suit
+        timbre.</div>
+      </div>
+
+      <div class="node" style="left:1500px; top:240px">
+        <div class="icon"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="9"/><circle cx="22" cy="22" r="16" stroke-dasharray="4 6"/></svg></div>
+        <div class="name">The orb</div>
+        <div class="meta">mouths the real audio</div>
+        <div class="lat">live RMS envelope</div>
+        <div class="tip">An AnalyserNode reads the actual playback waveform — the core's motion IS the
+        speech envelope, not a canned animation. Panels the reply mentions glow while he talks.</div>
+      </div>
+
+      <div class="node below" style="left:950px; top:470px" data-lane>
+        <div class="icon"><svg viewBox="0 0 44 44"><path d="M8 10h28M8 18h28M8 26h28M8 34h16"/></svg></div>
+        <div class="name" id="lane-a">Queue</div>
+        <div class="meta">intent file · vault</div>
+        <div class="lat">written in ~1 ms</div>
+        <div class="tip">Tier 1/3 never block the voice: a JSON intent drops into the vault queue while
+        the ack is already speaking. The voice layer is a dispatcher, not a worker.</div>
+      </div>
+
+      <div class="node below" style="left:1280px; top:470px" data-lane>
+        <div class="icon"><svg viewBox="0 0 44 44"><rect x="8" y="8" width="28" height="28" rx="2"/><path d="M16 22l5 5 8-10"/></svg></div>
+        <div class="name" id="lane-b">Runner</div>
+        <div class="meta" id="lane-b-meta">daemon · spawns the work</div>
+        <div class="lat" id="lane-b-lat">skills or headless claude</div>
+        <div class="tip">A background daemon watches the queue and spawns the job — a skill script or a
+        full headless Claude session (Opus 4.8; say "use haiku" to override one run). Deliverable lands
+        in the vault; the first line is read aloud.</div>
+      </div>
+
+      <div class="pulse" id="p1"></div>
+      <div class="pulse" id="p2"></div>
+      <div class="ticker" id="ticker">0 ms</div>
+    </div>
+  </div>
+
+  <div class="readout rv" id="readout"></div>
+</section>
+
+<!-- ====== SCENE 3 — the cascade, animated ====== -->
+<section id="router">
+  <div class="kicker rv">scene 02 · three brains, cheapest first</div>
+  <h2 class="rv">THE ROUTER NEVER<br/>OVERTHINKS</h2>
+  <div class="scene-grid rv">
+    <div class="sieve" aria-hidden="true">
+      <div class="drop" style="--d:0s"></div>
+      <div class="drop d2" style="--d:1.1s"></div>
+      <div class="drop d3" style="--d:2.3s"></div>
+      <div class="gate" style="top:18%">
+        <div class="bar"><div class="hitflash" style="--hd:0.6s"></div></div>
+        <div class="glabel"><span class="gname">01 · Rules</span><span class="gms">~20 ms</span></div>
+        <div class="gsub">regex · catches most utterances · free</div>
+      </div>
+      <div class="gate" style="top:52%">
+        <div class="bar"><div class="hitflash" style="--hd:3.2s"></div></div>
+        <div class="glabel"><span class="gname">02 · Local LLM</span><span class="gms">~600 ms</span></div>
+        <div class="gsub">qwen3.5:4b · same gpu · free · private</div>
+      </div>
+      <div class="gate dim" style="top:86%">
+        <div class="bar"></div>
+        <div class="glabel"><span class="gname">03 · Cloud</span><span class="gms">optional</span></div>
+        <div class="gsub">haiku slot · behind a key · dormant</div>
+      </div>
+    </div>
+    <div class="cascade-copy">
+      <div class="big-line">Every utterance falls until <em>something cheap</em> catches it.</div>
+      <p>Known phrasing stops at the regex gate instantly. Weird phrasing lands on a 4-billion-param
+      model living on the same GPU — benchmarked at 15/16 intent accuracy with grammar-locked JSON.
+      The cloud gate exists, and stays empty.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== SCENE 4 — what that buys, typed live ====== -->
+<section id="caps">
+  <div class="kicker rv">scene 03 · what that buys</div>
+  <h2 class="rv">DISPATCHER,<br/>NOT A CHATBOT</h2>
+  <div class="caps rv">
+    <div class="cap">
+      <h3>Conversation memory</h3>
+      <div class="demo">
+        <div class="who">you</div>
+        <span class="line">what's my MRR? … and why is that?</span>
+        <div class="resp">follow-ups resolve — the last few exchanges ride along, and memory survives restarts.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <h3>Spoken model override</h3>
+      <div class="demo">
+        <div class="who">you</div>
+        <span class="line">use opus, draft the sponsor email</span>
+        <div class="resp">one exact phrase reroutes a single run to another model. guarded against mishears.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <h3>Full barge-in</h3>
+      <div class="demo">
+        <div class="who">you · while he's talking</div>
+        <span class="line">hey jarvis — never mind</span>
+        <div class="resp">he stops mid-word and listens. esc kills speech; the queue clears with it.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <h3>Documents, on command</h3>
+      <div class="demo">
+        <div class="who">you</div>
+        <span class="line">bring up the trend scan</span>
+        <div class="resp">deliverables open on screen instantly — results are announced out loud when background work lands.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== SCENE 5 — the latency budget, drawn to scale ====== -->
+<section id="numbers">
+  <div class="kicker rv">scene 04 · measured, not promised</div>
+  <h2 class="rv">UNDER A SECOND,<br/>END TO END</h2>
+  <div class="tl rv" id="tl">
+    <div class="tl-bar">
+      <div class="tl-seg" style="width:31%"><i style="--fd:0s"></i><span><b>130</b>ms · whisper</span></div>
+      <div class="tl-seg" style="width:6%"><i style="--fd:0.25s"></i><span><b>20</b></span></div>
+      <div class="tl-seg" style="width:63%"><i style="--fd:0.4s"></i><span><b>270</b>ms · first audio out (kokoro starts speaking)</span></div>
+    </div>
+    <div class="tl-scale"><span>0 ms</span><span>release the key · or stop talking</span><span>~420 ms — voice replying</span></div>
+  </div>
+  <div class="stats rv">
+    <div class="stat"><div class="n">&lt;1<em>s</em></div><div class="l">speak → reply speaking</div></div>
+    <div class="stat"><div class="n">0<em>$</em></div><div class="l">per utterance</div></div>
+    <div class="stat"><div class="n">1<em>gpu</em></div><div class="l">runs the entire loop</div></div>
+  </div>
+  <p class="stack-line rv">STACK — <b>openWakeWord</b> hey-jarvis onnx · <b>faster-whisper</b> small.en float16 ·
+  <b>qwen3.5:4b</b> via Ollama, grammar-locked JSON · <b>Kokoro-82M</b> onnxruntime-gpu · <b>Next.js</b> HUD with
+  Web Audio sheen chain · <b>Claude Opus 4.8</b> headless for tier-3 deep work · one RTX 5090, one room.</p>
+</section>
+
+<footer>
+  <span>jarvis hud · voice loop dossier</span>
+  <span>ember core design system</span>
+</footer>
+
+<script>
+// --- hero waveform — deterministic pseudo-random bar heights ---------------
+const wave = document.getElementById("wave");
+for (let i = 0; i < 56; i++) {
+  const bar = document.createElement("i");
+  const a = Math.abs(Math.sin(i * 12.9898) * 43758.5453 % 1); // hash, not Math.random — stable
+  bar.style.setProperty("--i", i);
+  bar.style.setProperty("--a", (0.15 + a * 0.85).toFixed(2));
+  wave.appendChild(bar);
+}
+
+// --- scroll reveals + scene triggers ----------------------------------------
+const io = new IntersectionObserver(
+  (es) => es.forEach((e) => e.target.classList.toggle("in", e.isIntersecting)),
+  { threshold: 0.15 }
+);
+document.querySelectorAll(".rv").forEach((el) => io.observe(el));
+const capIo = new IntersectionObserver(
+  (es) => es.forEach((e) => e.target.classList.toggle("in-view", e.isIntersecting)),
+  { threshold: 0.5 }
+);
+document.querySelectorAll(".cap").forEach((el) => capIo.observe(el));
+const tlIo = new IntersectionObserver(
+  (es) => es.forEach((e) => e.target.classList.toggle("go", e.isIntersecting)),
+  { threshold: 0.5 }
+);
+tlIo.observe(document.getElementById("tl"));
+
+// --- signal-path choreography ------------------------------------------------
+const MAIN = "path('M80,240 H1500')";
+const WORK = "path('M800,240 V470 H1280 V240')";
+const stage = document.getElementById("stage");
+const p1 = document.getElementById("p1");
+const p2 = document.getElementById("p2");
+const ticker = document.getElementById("ticker");
+const readout = document.getElementById("readout");
+const branch = document.getElementById("w-branch");
+const ret = document.getElementById("w-return");
+const laneNodes = document.querySelectorAll("[data-lane]");
+const laneA = document.getElementById("lane-a");
+const laneB = document.getElementById("lane-b");
+const laneBMeta = document.getElementById("lane-b-meta");
+const laneBLat = document.getElementById("lane-b-lat");
+
+const TIERS = {
+  2: { readout: '“what’s my MRR” → answered from the vault snapshot · <b>reply speaking in ~0.5s</b>', lane: false },
+  1: { readout: '“run the trend scan” → ack speaks now, skill runs behind · <b>ack ~0.5s · result in minutes</b>',
+       lane: true, a: "Queue", b: "Runner", bMeta: "daemon · runs the skill", bLat: "announced when done" },
+  3: { readout: '“research X for me” → headless Claude session spun up · <b>ack ~0.5s · result 30s–2min</b>',
+       lane: true, a: "Queue", b: "Claude -p", bMeta: "headless session · opus 4.8", bLat: "deliverable + spoken summary" },
+};
+
+function nodeAt(i, on) {
+  const mains = stage.querySelectorAll(".node:not([data-lane])");
+  if (mains[i]) mains[i].classList.toggle("lit", on);
+}
+
+const TRAVEL_S = 4.2;
+function setTier(t) {
+  document.querySelectorAll(".tier-btn").forEach((b) =>
+    b.classList.toggle("on", Number(b.dataset.tier) === t)
+  );
+  const cfg = TIERS[t];
+  readout.innerHTML = cfg.readout;
+  branch.classList.toggle("show", cfg.lane);
+  ret.classList.toggle("show", cfg.lane);
+  laneNodes.forEach((n) => (n.style.opacity = cfg.lane ? 1 : 0.18));
+  if (cfg.lane) {
+    laneA.textContent = cfg.a;
+    laneB.textContent = cfg.b;
+    laneBMeta.textContent = cfg.bMeta;
+    laneBLat.textContent = cfg.bLat;
+  }
+  [p1, p2, ticker].forEach((p) => { p.classList.remove("run"); void p.offsetWidth; });
+  p1.style.offsetPath = MAIN;
+  p1.style.setProperty("--dur", `${TRAVEL_S}s`);
+  p1.classList.add("run");
+  ticker.style.offsetPath = MAIN;
+  ticker.style.setProperty("--dur", `${TRAVEL_S}s`);
+  ticker.classList.add("run");
+  if (cfg.lane) {
+    p2.style.offsetPath = WORK;
+    p2.style.setProperty("--dur", "5.6s");
+    p2.style.setProperty("--delay", "1.5s");
+    p2.classList.add("run");
+  }
+}
+
+// station glow + live ms ticker, phase-locked to the pulse animation
+let phase0 = performance.now();
+setInterval(() => {
+  if (!p1.classList.contains("run")) return;
+  const t = (((performance.now() - phase0) / 1000) % TRAVEL_S) / TRAVEL_S;
+  const stations = [0.0, 0.24, 0.5, 0.76, 1.0];
+  stations.forEach((s, i) => nodeAt(i, Math.abs(t - s) < 0.06));
+  // ms counter maps travel → the real ~870ms budget (stt+route+tts+overhead)
+  ticker.textContent = `${Math.round(t * 870)} ms`;
+}, 60);
+
+document.querySelectorAll(".tier-btn").forEach((b) =>
+  b.addEventListener("click", () => { phase0 = performance.now(); setTier(Number(b.dataset.tier)); })
+);
+window.addEventListener("keydown", (e) => {
+  if (TIERS[e.key]) { phase0 = performance.now(); setTier(Number(e.key)); }
+});
+
+function fit() {
+  const w = Math.min(document.documentElement.clientWidth * 0.9, 1600);
+  const s = w / 1600;
+  stage.style.transform = `scale(${s})`;
+  stage.style.marginBottom = `${(s - 1) * 660}px`;
+}
+window.addEventListener("resize", fit);
+fit();
+setTier(2);
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "email": "you@yourdomain.com",
+  "fromName": "Your Name",
+  "mediaKitPath": "",
+  "mediaKitLink": "https://your-media-kit-link",
+  "lookbackHours": 24,
+  "templateBody": "Hey ${firstName},\n\nThanks for reaching out. My media kit (with current rates) is here: ${mediaKitLink}\n\nLet me know if that fits the campaign and we can go from there.\n\nBest,\nYour Name\n",
+  "excludeSenders": [],
+  "leadSources": [
+    {
+      "label": "agency",
+      "subjectPrefix": "New Agency Inquiry",
+      "sender": "notifications@yourdomain.com",
+      "formFields": ["Website", "Services", "Timeline", "Budget", "Challenge"]
+    },
+    {
+      "label": "mentorship",
+      "subjectPrefix": "New Mentorship Application",
+      "sender": "notifications@yourdomain.com",
+      "formFields": ["Situation", "Timeline", "Biggest Challenge"]
+    }
+  ],
+  "leadTemplateBody": "Hey ${firstName},\n\nThanks for applying. Next step is a quick call: ${bookingLink}\n\nTalk soon,\nYour Name\n",
+  "bookingLink": "https://calendly.com/your-handle/30min"
+}

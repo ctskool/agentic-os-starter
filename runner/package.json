@@ -1,0 +1,12 @@
+{
+  "name": "chase-agentic-os-runner",
+  "version": "0.1.0",
+  "description": "Local daemon that processes Chase Command Center plugin intents",
+  "type": "module",
+  "main": "runner.js",
+  "bin": "runner.js",
+  "scripts": {
+    "start": "node runner.js"
+  },
+  "dependencies": {}
+}
