@@ -30,8 +30,6 @@ A cockpit, a runner, a skill fleet, and a fully local voice — installed with o
 
 ## Quick start
 
-Three lines. The third one is a word.
-
 ```bash
 git clone https://github.com/ctskool/agentic-os-starter.git && cd agentic-os-starter
 claude
