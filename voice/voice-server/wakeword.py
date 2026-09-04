@@ -16,6 +16,7 @@ The HUD listens on ws://:3108/events: "wake" = barge-in (stop TTS, show
 listening), "transcript" = dispatch through POST /api/voice/text.
 """
 
+import sys
 import threading
 import time
 
@@ -104,7 +105,26 @@ def capture_once(transcribe_pcm, emit, source="hotkey",
 
 class HotkeyListener:
     """Global OS hotkey → capture_once. Works with every window minimized —
-    the answer plays through the orb's (still-running) audio pipeline."""
+    the answer plays through the orb's (still-running) audio pipeline.
+
+    Windows: RegisterHotKey on a dedicated message-loop thread. A registered
+    hotkey is owned by the OS and survives sleep/resume, unlike the low-level
+    keyboard hook the `keyboard` library installs — that hook was silently
+    dropped after the first sleep cycle while /health still said "ok", so
+    the press did nothing and nothing was logged (2026-09-04). Registration
+    failure (combo already taken by another app) is a real error here, so
+    `ok` finally means what it says.
+    Other platforms: the `keyboard` library, as before.
+    """
+
+    _MODS = {"ctrl": 0x0002, "control": 0x0002, "alt": 0x0001, "shift": 0x0004,
+             "win": 0x0008, "super": 0x0008, "cmd": 0x0008}
+    _NAMED = {"space": 0x20, "enter": 0x0D, "return": 0x0D, "tab": 0x09, "esc": 0x1B,
+              "escape": 0x1B, "backspace": 0x08, "delete": 0x2E, "insert": 0x2D,
+              "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
+              "left": 0x25, "up": 0x26, "right": 0x27, "down": 0x28,
+              "`": 0xC0, "-": 0xBD, "=": 0xBB, "[": 0xDB, "]": 0xDD, "\\": 0xDC,
+              ";": 0xBA, "'": 0xDE, ",": 0xBC, ".": 0xBE, "/": 0xBF}
 
     def __init__(self, transcribe_pcm, emit, combo="ctrl+alt+j", capture_kwargs=None):
         self.combo = combo
@@ -113,8 +133,74 @@ class HotkeyListener:
         self._transcribe = transcribe_pcm
         self._emit = emit
         self._capture_kwargs = capture_kwargs or {}
+        self._thread = None
+
+    # -- combo string → (modifier mask, virtual-key code) --------------------
+    def _parse(self):
+        mods, vk = 0, None
+        for part in [p.strip().lower() for p in self.combo.split("+") if p.strip()]:
+            if part in self._MODS:
+                mods |= self._MODS[part]
+            elif vk is not None:
+                raise ValueError(f"more than one non-modifier key in '{self.combo}'")
+            elif len(part) == 1 and part.isalnum():
+                vk = ord(part.upper())
+            elif part in self._NAMED:
+                vk = self._NAMED[part]
+            elif part.startswith("f") and part[1:].isdigit() and 1 <= int(part[1:]) <= 24:
+                vk = 0x70 + int(part[1:]) - 1
+            else:
+                raise ValueError(f"unknown key '{part}' in '{self.combo}'")
+        if vk is None:
+            raise ValueError(f"no key in '{self.combo}'")
+        return mods | 0x4000, vk  # MOD_NOREPEAT: holding the chord fires once
 
     def start(self):
+        if sys.platform == "win32":
+            self._start_windows()
+        else:
+            self._start_keyboard_lib()
+
+    def _start_windows(self):
+        try:
+            mods, vk = self._parse()
+        except ValueError as e:
+            self.error = str(e)
+            print(f"voice hotkey failed: {self.error}")
+            return
+        ready = threading.Event()
+
+        def loop():
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            HOTKEY_ID = 0xA0B1
+            if not user32.RegisterHotKey(None, HOTKEY_ID, mods, vk):
+                code = ctypes.get_last_error() or ctypes.GetLastError()
+                self.error = f"RegisterHotKey failed (winerror {code}) — is '{self.combo}' taken by another app?"
+                print(f"voice hotkey failed: {self.error}")
+                ready.set()
+                return
+            self.ok = True
+            print(f"voice hotkey armed — {self.combo} (RegisterHotKey)")
+            ready.set()
+            msg = wintypes.MSG()
+            try:
+                while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                    if msg.message == 0x0312 and msg.wParam == HOTKEY_ID:  # WM_HOTKEY
+                        print("voice hotkey fired")
+                        self._fire()
+                    user32.TranslateMessage(ctypes.byref(msg))
+                    user32.DispatchMessageW(ctypes.byref(msg))
+            finally:
+                user32.UnregisterHotKey(None, HOTKEY_ID)
+                self.ok = False
+
+        self._thread = threading.Thread(target=loop, daemon=True, name="hotkey-win32")
+        self._thread.start()
+        ready.wait(5)
+
+    def _start_keyboard_lib(self):
         try:
             import keyboard  # global hooks, no admin needed in user session
         except Exception as e:  # noqa: BLE001
