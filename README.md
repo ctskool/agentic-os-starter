@@ -218,8 +218,4 @@ Windows is verified end to end on a clean install and on an existing vault. The 
 
 <div align="center">
 
-Built by [Chase AI](https://www.youtube.com/@Chase-H-AI). The full build story is on YouTube: [This Claude Code × Obsidian Agentic OS Will Be The New Meta](https://youtu.be/njHuj8OxIVI).
-
-<sub>Every skill, the runner, and the plugin were built with Claude Code. The point isn't the dashboard. It's that the dashboard is a receipt for the skills underneath.</sub>
-
 </div>
