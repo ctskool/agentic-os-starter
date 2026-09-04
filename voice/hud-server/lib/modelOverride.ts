@@ -9,9 +9,9 @@
 // ---------------------------------------------------------------------------
 
 const MODEL_PHRASES: Record<string, { id: string; spoken: string }> = {
-  opus: { id: "claude-opus-4-8", spoken: "Opus" },
-  fable: { id: "claude-fable-5", spoken: "Fable" },
-  sonnet: { id: "claude-sonnet-4-6", spoken: "Sonnet" },
+  opus: { id: "claude-opus-5", spoken: "Opus" },
+  fable: { id: "claude-fable-5-1", spoken: "Fable" },
+  sonnet: { id: "claude-sonnet-5", spoken: "Sonnet" },
   haiku: { id: "claude-haiku-4-5-20251001", spoken: "Haiku" },
 };
 

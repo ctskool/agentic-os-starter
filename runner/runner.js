@@ -67,9 +67,9 @@ const CLAUDE_MODEL = process.env.AGENTIC_OS_MODEL || _env.AGENTIC_OS_MODEL || "s
 // Per-run override — voice asks may carry args.model ("use opus" spoken in
 // the ask). Allowlist only; anything else falls back to CLAUDE_MODEL.
 const MODEL_ALLOWLIST = new Set([
-  "claude-opus-4-8",
-  "claude-fable-5",
-  "claude-sonnet-4-6",
+  "claude-opus-5",
+  "claude-fable-5-1",
+  "claude-sonnet-5",
   "claude-haiku-4-5-20251001",
 ]);
 
