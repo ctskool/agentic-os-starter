@@ -56,6 +56,7 @@ New-Item -ItemType Directory -Force -Path $Runner | Out-Null
 Copy-Item -Force (Join-Path $Repo "runner\runner.js") $Runner
 Copy-Item -Force (Join-Path $Repo "runner\package.json") $Runner
 Copy-Item -Force (Join-Path $Repo "runner\start-runner.vbs") $Runner
+Copy-Item -Force (Join-Path $Repo "runner\run-hidden.vbs") $Runner
 
 # 6. Env file (never overwrite)
 $EnvF = Join-Path $env:USERPROFILE ".claude\.env"
@@ -88,10 +89,16 @@ if ($YN -ne "n" -and $YN -ne "N") {
     $Lnk.Arguments = """$Runner\start-runner.vbs"""
     $Lnk.Save()
     Write-Host "-> Runner autostart shortcut added to shell:startup"
-    # metrics: scheduled task every 6h
-    $Action = "powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$GSkills\metrics-pull\scripts\run_all.ps1`""
-    schtasks /Create /F /SC HOURLY /MO 6 /TN "AgenticOS Metrics Pull" /TR $Action | Out-Null
-    Write-Host "-> Scheduled task 'AgenticOS Metrics Pull' registered (every 6h)"
+    # metrics: scheduled task every 6h. Registered through run-hidden.vbs —
+    # "powershell -WindowStyle Hidden" still flashes a console for a frame on
+    # every fire; a wscript-launched window never shows. The ScheduledTasks
+    # cmdlets avoid schtasks' 261-char action limit on long usernames.
+    $HiddenVbs = Join-Path $Runner "run-hidden.vbs"
+    $RunAll = Join-Path $GSkills "metrics-pull\scripts\run_all.ps1"
+    $TaskAction = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$HiddenVbs`" powershell -NoProfile -ExecutionPolicy Bypass -File `"$RunAll`""
+    $TaskTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Hours 6)
+    Register-ScheduledTask -TaskName "AgenticOS Metrics Pull" -Action $TaskAction -Trigger $TaskTrigger -Force | Out-Null
+    Write-Host "-> Scheduled task 'AgenticOS Metrics Pull' registered (every 6h, hidden)"
     # start the runner now
     Start-Process wscript.exe -ArgumentList """$Runner\start-runner.vbs"""
     Write-Host "-> Runner started"
