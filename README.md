@@ -101,17 +101,69 @@ The daily-note format is a **frozen parser contract** (`system/schemas/daily-not
 <img src="docs/assets/voice-architecture.png" alt="Voice system under the hood: orb in Obsidian, HUD server on 3107 with the three-tier router, voice server on 3108 with Whisper STT and Kokoro TTS, all local" width="100%"/>
 </div>
 
-You speak. Local Whisper hears. A small router decides which of three tiers the ask belongs to. Kokoro talks back. No cloud audio, ever.
+### What happens when you talk to it
 
-| Tier | What it does | Latency |
-|:--|:--|:--|
-| **1 · Dispatch** | "Run the intel brief" queues a skill and confirms. | instant |
-| **2 · Answer** | "What's my biggest thing today?" reads the vault state you already have: schedule, metrics, reports, Top 3. | ~1s |
-| **3 · Delegate** | "Go research X and draft a plan" spawns a real headless Claude run and speaks the summary when it lands. | minutes |
+1. **You speak.** Click the orb in Obsidian, or press **`Ctrl+Alt+J`** from any app with Obsidian minimized. Recording stops after 1.6s of silence.
+2. **Local Whisper turns it into text.** On your GPU if you have one, CPU if not. Nothing leaves the machine.
+3. **The router decides which of three tiers the ask belongs to.** Exact phrases match rules in ~15ms. Loose phrasing goes to Haiku, which takes about a second and a half and lands on the same fixed set of actions. The model can pick an action from the list; it can never invent one.
+4. **The tier does its job**, and **Kokoro speaks the result.** UI actions reply silently, because the thing happening is the confirmation. Every state change plays a short earcon.
 
-Say **"use fable"** or **"use opus"** inside a tier-3 ask to escalate that one run past the Sonnet default.
+### The three tiers, with examples
 
-Push-to-talk is the default. The wake word ships off because speaker bleed makes hands-free talk over its own replies. Set `WAKE_WORD=on` in `~/.claude/.env` if you use a headset. Models download once (~350MB); GPU is optional, CPU int8 works.
+| Tier | You say | What actually happens | Wait |
+|:--|:--|:--|:--|
+| **1 · Dispatch** | "Run the intel brief" · "pull metrics" · "outlier radar" | Writes one intent JSON to `system/queue/`. The runner does the work in the background. The orb says "on it" and tells you when it lands. | instant |
+| **2 · Answer** | "What's the biggest thing on my schedule today?" · "What was the top AI story?" · "Any new outliers?" · "How's the channel doing?" | Reads the answer out of files that already exist: today's daily note, the latest morning-intel brief, `metrics.csv`, the outlier radar. **No search, no research, no new Claude run.** | ~1s |
+| **3 · Delegate** | "**Go research** what changed in Claude Code this week and draft a summary" · "**Go plan** the launch email" | The only tier that spends real model time. Spawns a headless `claude -p` through the runner, keeps working while you work, then speaks the first line of the result and drops the deliverable in the vault. Fires only when you explicitly hand something off. | minutes |
+
+### Why tier 2 is fast
+
+The voice layer is a **read head over work that already ran**, not a voice-controlled Claude Code.
+
+Every morning the skills do the heavy lifting: `/morning-intel` scans the news, `/plan-today` writes the schedule and Top 3, `/metrics-pull` refreshes the numbers, `/inbox-brief` triages email. Each one leaves a file in the vault. The router keeps a small **snapshot** of those files: the Top 3, today's schedule, the four metric cards, the intel brief's top stories, the inbox triage, the latest outliers, and the last few runs.
+
+When you ask a question, tier 2 answers from that snapshot. It never opens a browser, never calls a search API, never starts a fresh model session. That is the whole trick: the expensive thinking happened once, on a schedule, and the voice just reads it back.
+
+A concrete number: "what's in my inbox" used to route to tier 3 and take **43 seconds**, because it spun up a Claude run that re-read Gmail. Moving the inbox triage into the snapshot made the same question a tier-2 answer at **about 1.5 seconds**. Same answer, thirty times faster, zero tokens.
+
+The rule the router follows: **if the answer already exists in the vault, read it. If it doesn't, ask before doing anything expensive.** Tier 3 fires only on explicit delegation ("go research", "go draft", "go plan") or when you say yes to an offer like "want me to dig deeper?"
+
+### What it can do inside Obsidian
+
+Say any of these, from the orb or from the hotkey with Obsidian minimized. Add "in a split", "on the right sidebar", or "in a tab" to any open command; the default is a tab in the main pane.
+
+| Say | It does |
+|:--|:--|
+| "open my daily note" | opens today's note |
+| "open the cockpit" | brings up the command center |
+| "open the lighthouse plan" | fuzzy-matches any note in the vault and opens it |
+| "search for retention" | Obsidian global search |
+| "open the intel brief" · "open github trending" · "open the outlier radar" · "open the inbox brief" | opens the latest saved report of that kind |
+| "read me the outlier radar" | speaks the document |
+| "bring up that repo" | resolves a GitHub repo from the conversation or the trending list and opens it |
+| "go back" · "go forward" · "close tab" · "split right" · "split down" · "toggle sidebar" · "graph view" · "open the terminal" | the matching Obsidian command |
+
+### What it can write
+
+The voice edits your vault, not a UI. Writes happen server-side on the markdown files, and Obsidian sees them as normal edits.
+
+| Say | It does |
+|:--|:--|
+| "check off priority two" | flips the second Top 3 checkbox in today's note |
+| "check off the thumbnail task" | fuzzy-matches a task across Top 3 and Daily Drivers and checks it |
+| "add 'send the deck to Marco' to my tasks" | appends a Daily Driver |
+
+### Picking the model per run
+
+Background runs pin to Sonnet so your default model never burns on automations. Say **"use fable"** or **"use opus"** anywhere inside a tier-3 ask and only that one run escalates. The run feed shows which model did it.
+
+### Async work finds you
+
+Anything you dispatch shows up as a **task chip riding the orb**: running chips pulse, finished ones wait for a click that opens the deliverable, errors open the log. Completions are also spoken, so you don't have to watch the feed.
+
+### Settings
+
+Push-to-talk is the default. The wake word ships off because speaker bleed makes hands-free talk over its own replies; set `WAKE_WORD=on` in `~/.claude/.env` if you use a headset. Change the hotkey with `VOICE_HOTKEY`, or set it to `off`. Models download once (~350MB); GPU is optional, CPU int8 works.
 
 <br/>
 
