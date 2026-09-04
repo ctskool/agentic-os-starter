@@ -18,7 +18,7 @@ ENV_PATH = Path.home() / ".claude" / ".env"
 def _vault_root() -> Path:
     v = os.environ.get("AGENTIC_OS_VAULT")
     if not v and ENV_PATH.exists():
-        for raw in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        for raw in ENV_PATH.read_text(encoding="utf-8-sig").splitlines():
             line = raw.strip()
             if line.startswith("AGENTIC_OS_VAULT="):
                 v = line.split("=", 1)[1].strip().strip("\"'")
@@ -37,7 +37,7 @@ def load_env_file(path: Path = ENV_PATH) -> dict[str, str]:
     if not path.exists():
         return {}
     out: dict[str, str] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

@@ -32,7 +32,7 @@ def vault_root() -> Path:
         return Path(env)
     dotenv = Path.home() / ".claude" / ".env"
     if dotenv.exists():
-        for line in dotenv.read_text(encoding="utf-8").splitlines():
+        for line in dotenv.read_text(encoding="utf-8-sig").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -47,7 +47,7 @@ def dotenv_get(key: str) -> str | None:
         return os.environ[key]
     dotenv = Path.home() / ".claude" / ".env"
     if dotenv.exists():
-        for line in dotenv.read_text(encoding="utf-8").splitlines():
+        for line in dotenv.read_text(encoding="utf-8-sig").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue

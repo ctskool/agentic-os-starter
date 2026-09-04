@@ -64,12 +64,12 @@ if (-not (Test-Path $EnvF)) {
     Copy-Item (Join-Path $Repo ".env.example") $EnvF
 }
 $envText = Get-Content $EnvF -Raw
-if ($envText -match "(?m)^AGENTIC_OS_VAULT=.+$") {
+if ($envText -match "(?m)^AGENTIC_OS_VAULT=[^\r\n]*[^\s]") {
     Write-Host "-> AGENTIC_OS_VAULT already set (leaving as-is)"
 } else {
     $vaultFwd = $Vault -replace "\\", "/"
-    $envText = $envText -replace "(?m)^AGENTIC_OS_VAULT=.*$", "AGENTIC_OS_VAULT=$vaultFwd"
-    Set-Content -Path $EnvF -Value $envText -Encoding utf8
+    $envText = $envText -replace "(?m)^AGENTIC_OS_VAULT=[^\r\n]*", "AGENTIC_OS_VAULT=$vaultFwd"
+    [IO.File]::WriteAllText($EnvF, $envText, (New-Object System.Text.UTF8Encoding $false))
     Write-Host "-> Set AGENTIC_OS_VAULT=$vaultFwd"
 }
 

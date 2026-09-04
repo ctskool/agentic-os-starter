@@ -67,7 +67,7 @@ def vault_root() -> Path:
     # Best-effort ~/.claude/.env parse
     dotenv = Path.home() / ".claude" / ".env"
     if dotenv.exists():
-        for line in dotenv.read_text(encoding="utf-8").splitlines():
+        for line in dotenv.read_text(encoding="utf-8-sig").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue

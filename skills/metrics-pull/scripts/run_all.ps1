@@ -5,8 +5,8 @@
 
 $ErrorActionPreference = "Continue"
 
-$root = "~\.claude\skills\metrics-pull\scripts"
-$logDir = "~\.claude\skills\metrics-pull\logs"
+$root = Join-Path $env:USERPROFILE ".claude\skills\metrics-pull\scripts"
+$logDir = Join-Path $env:USERPROFILE ".claude\skills\metrics-pull\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $ts = (Get-Date).ToString("yyyy-MM-ddTHH-mm-ss")
