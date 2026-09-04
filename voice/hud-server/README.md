@@ -4,9 +4,7 @@ Ember Core HUD: a Jarvis-style sci-fi dashboard wired to a **real** Agentic OS �
 
 ## System architecture
 
-**Full visual explainer: [`docs/architecture.html`](docs/architecture.html)** — open it in a
-browser; self-contained, shows what's local vs cloud, the voice round trip, router tiers,
-and the skill lifecycle. The short version:
+What's local vs cloud, the voice round trip, router tiers, and the skill lifecycle:
 
 ```
 ┌──────────────────────────── YOUR MACHINE ────────────────────────────┐   ┌─ CLOUD (opt) ─┐
@@ -25,7 +23,6 @@ and the skill lifecycle. The short version:
 - **Three router tiers**: 1 = dispatch a skill (intent JSON → queue), 2 = instant answer from
   the vault snapshot (~25ms), 3 = background headless-Claude ask (answer spoken when it lands).
 - **Mental model**: the voice layer is a dispatcher, not a worker. Files are the message bus.
-- Current voice/HUD state in depth: [`VOICE-HANDOFF.md`](VOICE-HANDOFF.md).
 
 ## Data sources (read-only)
 
@@ -44,13 +41,17 @@ and the skill lifecycle. The short version:
 
 ```
 npm install
-npm run dev    # http://localhost:3000
+npm run dev -- -p 3107    # http://localhost:3107
 ```
+
+Or use the launchers the installer registers: `start-hud.vbs` (Windows, hidden, logs to
+`.next-dev.log`) / `start-hud.sh` (Mac). The port must be 3107 — the cockpit orb and the
+voice server are both wired to it.
 
 ## Architecture
 
 - **Next.js 15 app router.** `/api/state` reads the vault fresh per request (no cache); client polls every 5s.
-- **GraphCore** (`components/GraphCore.tsx`) — JARVIS-reference centerpiece: 2,200-node volumetric knowledge-graph cloud (center-dense), k-nearest edges that follow per-node drift, constant rotation, UnrealBloom. White core ignites only while speaking (synthetic envelope now; phase 2 swaps in AnalyserNode RMS from 11labs TTS). Blue palette per reference; error mode goes red.
+- **GraphCore** (`components/GraphCore.tsx`) — JARVIS-reference centerpiece: 2,200-node volumetric knowledge-graph cloud (center-dense), k-nearest edges that follow per-node drift, constant rotation, UnrealBloom. White core ignites only while speaking, driven by AnalyserNode RMS from the Kokoro TTS stream. Blue palette per reference; error mode goes red.
 - **DitherCore** (`components/DitherCore.tsx` + `components/ui/dithering-shader.tsx`) — retained alternate: WebGL2 dithered sphere with voice-reactive swell. Color + speed are the state language: idle ember / working gold / listening cobalt / speaking amber / error red, eased in the render loop. Mode wired to runner `busy` + fetch errors; keys 1–5 override, 0/Esc auto.
 - **Core Lab** (`/lab`) — 10 alternative Three.js centerpiece candidates on one scissor-rendered canvas; click or keys 1–0 to isolate. `components/EmberCore.tsx` (particle reactor + UnrealBloom) kept as the strongest three.js variant.
 - **Design system** — "Ember Core": near-black, Claude-terracotta, hairline strokes, Chakra Petch + IBM Plex Mono. Deliberately NOT Iron-Man blue.
@@ -60,4 +61,5 @@ npm run dev    # http://localhost:3000
 
 Fully local: Kokoro TTS + faster-whisper STT on `:3108` (start via
 `voice-server\start-voice-server.vbs`), push-to-talk (hold Space), three-tier intent
-router. Setup, latency budget, and gotchas live in [`VOICE-HANDOFF.md`](VOICE-HANDOFF.md).
+router. Setup and troubleshooting live in the repo root `README.md` (Voice mode notes) and
+`docs/setup-windows.md` / `docs/setup-mac.md`.
